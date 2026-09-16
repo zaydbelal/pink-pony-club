@@ -1,0 +1,149 @@
+import { GoogleGenAI } from "@google/genai";
+import { z, type ZodType } from "zod";
+import {
+  LectureNotesSchema,
+  PaperGradeSchema,
+  QuestionPaperSchema,
+  HintResponseSchema,
+  type SyllabusInput,
+  type QuestionPaper,
+  type StudentAnswer,
+  type HintRequest,
+} from "./schemas";
+
+const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.8-flash";
+
+const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+/** Gemini's responseJsonSchema only supports a subset of JSON Schema keywords - strip the rest. */
+function toResponseJsonSchema(schema: ZodType) {
+  const jsonSchema = z.toJSONSchema(schema) as Record<string, unknown>;
+  delete jsonSchema.$schema;
+  return jsonSchema;
+}
+
+async function generateStructured<T>(options: {
+  schema: ZodType<T>;
+  systemInstruction: string;
+  prompt: string;
+  maxOutputTokens?: number;
+}): Promise<T> {
+  const response = await client.models.generateContent({
+    model: MODEL,
+    contents: options.prompt,
+    config: {
+      systemInstruction: options.systemInstruction,
+      responseMimeType: "application/json",
+      responseJsonSchema: toResponseJsonSchema(options.schema),
+      maxOutputTokens: options.maxOutputTokens ?? 8000,
+    },
+  });
+
+  const text = response.text;
+  if (!text) {
+    throw new Error("Gemini returned an empty response");
+  }
+
+  let parsedJson: unknown;
+  try {
+    parsedJson = JSON.parse(text);
+  } catch {
+    throw new Error("Gemini returned output that wasn't valid JSON");
+  }
+
+  const result = options.schema.safeParse(parsedJson);
+  if (!result.success) {
+    throw new Error(
+      `Gemini returned output that didn't match the expected schema: ${result.error.message}`,
+    );
+  }
+  return result.data;
+}
+
+export async function generateLectureNotes(input: SyllabusInput) {
+  return generateStructured({
+    schema: LectureNotesSchema,
+    systemInstruction:
+      "You are an experienced teacher writing lecture notes for a small tuition institution. " +
+      "Write clear, well-organized notes a teacher can hand directly to students, broken into " +
+      "logically ordered sections. Stay strictly within the given syllabus scope - do not invent " +
+      "topics the syllabus doesn't cover.",
+    prompt:
+      `Subject: ${input.subject}\n` +
+      `Unit: ${input.unitTitle}\n` +
+      (input.gradeLevel ? `Grade level: ${input.gradeLevel}\n` : "") +
+      `Syllabus:\n${input.syllabusText}\n\n` +
+      "Generate the lecture notes for this unit.",
+    maxOutputTokens: 16000,
+  });
+}
+
+export async function generateQuestionPaper(
+  input: SyllabusInput,
+  numQuestions = 6,
+) {
+  return generateStructured({
+    schema: QuestionPaperSchema,
+    systemInstruction:
+      "You are an experienced teacher writing an exam question paper for a small tuition " +
+      "institution, strictly from the given syllabus. For every question, also produce an " +
+      "internal answer key and a short grading rubric - these are for the teacher/grader only " +
+      "and must never be shown to students. Mix question types where appropriate " +
+      "(short_answer, long_answer, mcq) and give each question a point value. " +
+      "Every question id must be unique.",
+    prompt:
+      `Subject: ${input.subject}\n` +
+      `Unit: ${input.unitTitle}\n` +
+      (input.gradeLevel ? `Grade level: ${input.gradeLevel}\n` : "") +
+      `Syllabus:\n${input.syllabusText}\n\n` +
+      `Generate a question paper with exactly ${numQuestions} questions covering this syllabus.`,
+    maxOutputTokens: 16000,
+  });
+}
+
+export async function gradeSubmission(
+  paper: QuestionPaper,
+  answers: StudentAnswer[],
+) {
+  const answerById = new Map(answers.map((a) => [a.questionId, a.answer]));
+  const gradingInput = paper.questions.map((q) => ({
+    questionId: q.id,
+    prompt: q.prompt,
+    answerKey: q.answerKey,
+    rubric: q.rubric,
+    maxScore: q.points,
+    studentAnswer: answerById.get(q.id) ?? "(no answer submitted)",
+  }));
+
+  return generateStructured({
+    schema: PaperGradeSchema,
+    systemInstruction:
+      "You are grading a student's exam submission against the teacher's answer key and rubric " +
+      "for each question. Score fairly, giving partial credit per the rubric where the student's " +
+      "reasoning is partially correct. Give concise, specific per-question feedback the student " +
+      "will see. totalScore/maxScore must equal the sum of the per-question scores/maxScores.",
+    prompt: `Grade this submission:\n${JSON.stringify(gradingInput, null, 2)}`,
+    maxOutputTokens: 16000,
+  });
+}
+
+export async function generateHint(req: HintRequest) {
+  const tier = req.hintsGivenSoFar.length;
+  return generateStructured({
+    schema: HintResponseSchema,
+    systemInstruction:
+      "You are a tutor giving a student a hint on a practice problem, one graduated step at a " +
+      "time. Never give the full solution unless this is explicitly the final hint tier (tier 3, " +
+      "0-indexed: the 4th hint). Each hint should be a small, useful nudge beyond the previous " +
+      "ones, not a restatement.",
+    prompt:
+      `Problem: ${req.problem}\n` +
+      (req.studentAttempt
+        ? `Student's current attempt/progress: ${req.studentAttempt}\n`
+        : "Student has not attempted yet.\n") +
+      `Hints already given (in order): ${JSON.stringify(req.hintsGivenSoFar)}\n` +
+      `This will be hint tier ${tier} (0-indexed). Give the next hint. ` +
+      `Set isFinalHint to true only if tier >= 3.`,
+    maxOutputTokens: 4000,
+  });
+}

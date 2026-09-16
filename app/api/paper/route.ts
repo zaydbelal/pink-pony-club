@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { SyllabusInputSchema } from "@/lib/schemas";
-import { generateQuestionPaper } from "@/lib/claude";
+import { generateQuestionPaper } from "@/lib/gemini";
 import { handleRouteError } from "@/lib/api-utils";
 
 const RequestSchema = z.object({

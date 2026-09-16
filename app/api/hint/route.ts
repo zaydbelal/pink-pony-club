@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { HintRequestSchema } from "@/lib/schemas";
-import { generateHint } from "@/lib/claude";
+import { generateHint } from "@/lib/gemini";
 import { handleRouteError } from "@/lib/api-utils";
 
 export async function POST(request: NextRequest) {
