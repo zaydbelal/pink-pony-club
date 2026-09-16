@@ -7,6 +7,13 @@ Run with: uvicorn main:app --reload --port 8000
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Must run before any module below reads os.environ (e.g. gemini_client's
+# module-level GEMINI_MODEL lookup), and must not depend on the caller's cwd.
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 from fastapi import FastAPI
 
