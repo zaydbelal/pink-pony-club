@@ -543,7 +543,7 @@ export default function TeacherPage() {
           <h2>Weekly reports</h2>
           <div className="card col">
             <p className="muted">
-              Runs automatically on a schedule (see the scheduler in instrumentation.ts), or
+              Runs automatically on a schedule (see the scheduler in backend/scheduler.py), or
               trigger one now. Email delivery is stubbed for the demo - it&apos;s logged, not
               actually sent.
             </p>
