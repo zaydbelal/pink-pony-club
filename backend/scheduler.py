@@ -5,6 +5,11 @@ cycle is actually observable in a demo instead of waiting a real week; a
 production deployment would swap this for a real cron/queue trigger instead of
 an in-process loop, which resets on every restart and only runs on one instance.
 
+n8n/weekly-reports-workflow.json is exactly that external replacement - it
+calls the same POST /api/reports/generate endpoint on a real cron schedule
+from outside the process. Set SCHEDULER_ENABLED=false when running that
+workflow so reports aren't generated twice.
+
 A direct port of instrumentation.ts.
 """
 
@@ -33,6 +38,10 @@ async def _loop(interval_seconds: float) -> None:
 def start_scheduler() -> None:
     global _task
     if _task is not None:
+        return
+
+    if (os.environ.get("SCHEDULER_ENABLED") or "true").strip().lower() in ("false", "0", "no"):
+        logger.info("[scheduler] disabled via SCHEDULER_ENABLED - not starting the in-process loop")
         return
 
     interval_ms = int(os.environ.get("REPORT_INTERVAL_MS") or 0) or 10 * 60 * 1000

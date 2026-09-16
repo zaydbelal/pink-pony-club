@@ -1,0 +1,181 @@
+{
+  "name": "ClassPilot - Weekly Reports",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every Monday 8am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -160,
+        0
+      ],
+      "notes": "Fires weekly. For testing, temporarily switch the rule to an Interval of a few minutes instead of a Cron Expression."
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.CLASSPILOT_BACKEND_URL || 'http://127.0.0.1:8000' }}/api/units",
+        "options": {}
+      },
+      "id": "list-units",
+      "name": "List Units",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        80,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const units = $input.first().json.units || [];\nconst teacherIds = [...new Set(units.map((u) => u.teacherId))];\n\nif (teacherIds.length === 0) {\n  return [];\n}\n\nreturn teacherIds.map((teacherId) => ({ json: { teacherId } }));"
+      },
+      "id": "extract-teacher-ids",
+      "name": "Extract Teacher IDs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        0
+      ],
+      "notes": "Dedupes teacherId across all units, since /api/units has no dedicated 'list teachers' endpoint."
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "loop-teachers",
+      "name": "Loop Over Teachers",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CLASSPILOT_BACKEND_URL || 'http://127.0.0.1:8000' }}/api/reports/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"teacherId\": $json.teacherId, \"recipientEmail\": $json.teacherId + \"@example.com\" } }}",
+        "options": {}
+      },
+      "id": "generate-report",
+      "name": "Generate Report For Teacher",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        820,
+        -80
+      ],
+      "notes": "Calls the same POST /api/reports/generate endpoint the in-process scheduler used to call directly - this workflow is a drop-in external replacement for backend/scheduler.py."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "summary",
+              "name": "summary",
+              "value": "={{ 'Weekly reports generated for ' + $('Extract Teacher IDs').all().length + ' teacher(s): ' + $('Extract Teacher IDs').all().map(item => item.json.teacherId).join(', ') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "summary",
+      "name": "Summarize Run",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        820,
+        120
+      ],
+      "notes": "Replace this with a real notification node (Slack, Email, etc.) once you have credentials configured - it just produces a text summary for now."
+    }
+  ],
+  "connections": {
+    "Every Monday 8am": {
+      "main": [
+        [
+          {
+            "node": "List Units",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Units": {
+      "main": [
+        [
+          {
+            "node": "Extract Teacher IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Teacher IDs": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Teachers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Teachers": {
+      "main": [
+        [
+          {
+            "node": "Summarize Run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Report For Teacher",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Report For Teacher": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Teachers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "id": "ClsPltWklyReports01"
+}
