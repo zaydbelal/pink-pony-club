@@ -11,7 +11,7 @@ import {
   type HintRequest,
 } from "./schemas";
 
-const MODEL = process.env.GEMINI_MODEL?.trim() || "gemini-3.8-flash";
+const MODEL = process.env.GEMINI_MODEL?.trim() || "gemini-3.6-flash";
 
 const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
