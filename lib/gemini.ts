@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { ApiError, GoogleGenAI } from "@google/genai";
 import { z, type ZodType } from "zod";
 import {
   TopicModuleSchema,
@@ -11,7 +11,21 @@ import {
 
 const MODEL = process.env.GEMINI_MODEL?.trim() || "gemini-3.6-flash";
 
-const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+let cachedClient: GoogleGenAI | null = null;
+
+/** Lazily builds the client so a missing key fails with a clear message at call time, not a cryptic Google Cloud ADC error. */
+function getClient(): GoogleGenAI {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error(
+      "GEMINI_API_KEY is not set. Add it to your environment (see .env.example) before calling the Gemini API.",
+    );
+  }
+  if (!cachedClient) {
+    cachedClient = new GoogleGenAI({ apiKey });
+  }
+  return cachedClient;
+}
 
 /** Gemini's responseJsonSchema only supports a subset of JSON Schema keywords - strip the rest. */
 function toResponseJsonSchema(schema: ZodType) {
@@ -20,13 +34,26 @@ function toResponseJsonSchema(schema: ZodType) {
   return jsonSchema;
 }
 
-async function generateStructured<T>(options: {
+/** Retries once on rate limits, server errors, and the flaky-but-transient shapes of a bad generation. */
+function isRetryable(error: unknown): boolean {
+  if (error instanceof ApiError) {
+    return error.status === 429 || error.status >= 500;
+  }
+  return (
+    error instanceof Error &&
+    (error.message === "Gemini returned an empty response" ||
+      error.message === "Gemini returned output that wasn't valid JSON" ||
+      error.message.startsWith("Gemini returned output that didn't match the expected schema"))
+  );
+}
+
+async function generateStructuredOnce<T>(options: {
   schema: ZodType<T>;
   systemInstruction: string;
   prompt: string;
   maxOutputTokens?: number;
 }): Promise<T> {
-  const response = await client.models.generateContent({
+  const response = await getClient().models.generateContent({
     model: MODEL,
     contents: options.prompt,
     config: {
@@ -56,6 +83,22 @@ async function generateStructured<T>(options: {
     );
   }
   return result.data;
+}
+
+async function generateStructured<T>(options: {
+  schema: ZodType<T>;
+  systemInstruction: string;
+  prompt: string;
+  maxOutputTokens?: number;
+}): Promise<T> {
+  try {
+    return await generateStructuredOnce(options);
+  } catch (error) {
+    if (!isRetryable(error)) {
+      throw error;
+    }
+    return await generateStructuredOnce(options);
+  }
 }
 
 export async function generateTopicModule(rawText: string) {
