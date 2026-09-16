@@ -34,11 +34,96 @@
 
   --background: var(--surface);
   --foreground: var(--on-surface);
+
+  --radius-sm: 2px;
+  --radius: 4px;
+  --mascot: none;
+  --brand-icon: "\25a0"; /* ■ */
+}
+
+/*
+ * Light mode - same editorial structure as the dark "Obsidian & Champagne"
+ * theme, inverted to a warm ivory/paper palette. Kept restrained (no pink,
+ * no rounding change) so it reads as a serious alternate, not a gimmick.
+ */
+:root[data-theme="light"] {
+  --surface: #faf7f0;
+  --surface-dim: #f3efe4;
+  --surface-bright: #ffffff;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #f3efe4;
+  --surface-container: #ece5d5;
+  --surface-container-high: #e3dac5;
+  --surface-container-highest: #d8ccb2;
+  --on-surface: #2a2620;
+  --on-surface-variant: #5a5346;
+  --outline: #8a8171;
+  --outline-variant: #d4c9b0;
+  --primary: #a5822e;
+  --on-primary: #ffffff;
+  --primary-container: #8a6b23;
+  --on-primary-container: #ffffff;
+  --secondary: #6b6252;
+  --on-secondary: #ffffff;
+  --secondary-container: #e3dac5;
+  --tertiary: #4a4438;
+  --error: #b3261e;
+  --error-container: #ffdad6;
+  --on-error-container: #7a0009;
+
+  --background: var(--surface);
+  --foreground: var(--on-surface);
+}
+
+/*
+ * Pink Pony mode - the cute/fun theme: bubblegum palette, rounder corners,
+ * and a small mascot pony that pops up in the corner (see .pony-mascot).
+ */
+:root[data-theme="pony"] {
+  --surface: #fff0f6;
+  --surface-dim: #ffe3ee;
+  --surface-bright: #ffffff;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #ffe6f0;
+  --surface-container: #ffd6e8;
+  --surface-container-high: #ffc2dd;
+  --surface-container-highest: #ffabd0;
+  --on-surface: #5c1436;
+  --on-surface-variant: #8a2a5c;
+  --outline: #d9739f;
+  --outline-variant: #ffc2dd;
+  --primary: #ff5da2;
+  --on-primary: #ffffff;
+  --primary-container: #ff8fbf;
+  --on-primary-container: #6b0d3b;
+  --secondary: #b9508a;
+  --on-secondary: #ffffff;
+  --secondary-container: #ffd6e8;
+  --tertiary: #7d2255;
+  --error: #e0356b;
+  --error-container: #ffd6e2;
+  --on-error-container: #7a0033;
+
+  --background: var(--surface);
+  --foreground: var(--on-surface);
+
+  --radius-sm: 12px;
+  --radius: 16px;
+  --mascot: block;
+  --brand-icon: "\1f984"; /* 🦄 */
 }
 
 html {
   height: 100%;
   color-scheme: dark;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+}
+
+html[data-theme="pony"] {
+  color-scheme: light;
 }
 
 html,
@@ -100,7 +185,7 @@ a {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 0.5rem 0.75rem;
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   color: var(--on-surface-variant);
   transition: background 0.15s, color 0.15s;
 }
@@ -129,6 +214,57 @@ a {
 .brand-mark {
   color: var(--primary-container);
   font-size: 0.65rem;
+}
+
+.brand-mark::before {
+  content: var(--brand-icon);
+}
+
+:root[data-theme="pony"] .brand-mark {
+  font-size: 1rem;
+}
+
+/* --- Theme toggle --- */
+
+.theme-toggle {
+  margin-left: auto;
+  display: flex;
+  gap: 0.25rem;
+}
+
+.theme-toggle button {
+  padding: 0.4rem 0.6rem;
+  font-size: 10px;
+}
+
+.theme-toggle button.active {
+  background: var(--primary-container);
+  border-color: var(--primary-container);
+  color: var(--surface-container-lowest);
+}
+
+/* --- Pony mascot: a small bouncing pony, only visible in Pink Pony mode --- */
+
+.pony-mascot {
+  display: var(--mascot);
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 60;
+  font-size: 2.5rem;
+  line-height: 1;
+  pointer-events: none;
+  animation: pony-bounce 1.8s ease-in-out infinite;
+  filter: drop-shadow(0 4px 6px rgba(224, 53, 107, 0.35));
+}
+
+@keyframes pony-bounce {
+  0%, 100% {
+    transform: translateY(0) rotate(-4deg);
+  }
+  50% {
+    transform: translateY(-14px) rotate(4deg);
+  }
 }
 
 /* --- Typography --- */
@@ -188,7 +324,7 @@ label {
 .card {
   background: var(--surface-container-low);
   border: 1px solid var(--outline-variant);
-  border-radius: 4px;
+  border-radius: var(--radius);
   padding: 1.25rem;
   margin: 0.75rem 0;
 }
@@ -216,7 +352,7 @@ select {
   color: var(--on-surface);
   background: var(--surface-container-lowest);
   border: 1px solid var(--outline-variant);
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   padding: 0.5rem 0.65rem;
 }
 
@@ -242,7 +378,7 @@ button {
   text-transform: uppercase;
   cursor: pointer;
   border: 1px solid var(--outline-variant);
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   padding: 0.55rem 1rem;
   background: var(--surface-container);
   color: var(--on-surface);
@@ -279,7 +415,7 @@ button.primary:hover:not(:disabled) {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 0.2rem 0.5rem;
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   background: var(--surface-container);
   color: var(--on-surface-variant);
   border: 1px solid var(--outline-variant);
@@ -313,7 +449,7 @@ button.primary:hover:not(:disabled) {
   border: 1px solid var(--error);
   background: color-mix(in srgb, var(--error-container) 25%, var(--surface-container-low));
   color: var(--on-error-container);
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   padding: 0.6rem 0.8rem;
   font-size: 0.9rem;
 }
@@ -322,7 +458,7 @@ button.primary:hover:not(:disabled) {
   padding: 0.6rem 0.5rem;
   border-bottom: 1px solid var(--outline-variant);
   cursor: pointer;
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   transition: background 0.15s;
 }
 
