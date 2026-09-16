@@ -11,6 +11,7 @@ from google.genai import types
 from pydantic import BaseModel
 
 from schemas import (
+    Diagnosis,
     FeynmanEvaluation,
     FollowUpMaterial,
     HintRequest,
@@ -19,6 +20,7 @@ from schemas import (
     PaperGrade,
     QuestionPaper,
     RemediationPlan,
+    ReviewVerdict,
     StudentAnswer,
     SyllabusInput,
     TopicStats,
@@ -286,40 +288,127 @@ async def evaluate_feynman_explanation(
     )
 
 
-async def generate_remediation_plan(
+def _format_mistakes(sample_mistakes: List[str]) -> str:
+    return (
+        "\n".join(f"{i + 1}. {m}" for i, m in enumerate(sample_mistakes))
+        if sample_mistakes
+        else "(no specific feedback available)"
+    )
+
+
+# --- Remediation is a 3-agent pipeline: Diagnostician -> Content -> Reviewer.
+# Each is a separate model call with a narrow role, grounded only in the
+# evidence (and, for Content/Reviewer, the previous agent's output) - not one
+# flat prompt asked to do everything at once.
+
+
+async def diagnose_weak_topic(
     subject: str,
     topic: str,
     sample_mistakes: List[str],
     cohort_size: int,
     retrieved_context: Optional[List[str]] = None,
-) -> RemediationPlan:
-    mistakes_text = (
-        "\n".join(f"{i + 1}. {m}" for i, m in enumerate(sample_mistakes))
-        if sample_mistakes
-        else "(no specific feedback available - build a general remediation sequence for this topic)"
-    )
+) -> Diagnosis:
+    """Agent 1 (Diagnostician): reads raw mistake evidence and names the actual
+    underlying gap - not just "students are weak at X", but *why*."""
     return await _generate_structured(
-        schema=RemediationPlan,
+        schema=Diagnosis,
         system_instruction=(
-            "You are a teacher building a short, structured remediation sequence to assign to a group "
-            "of students who are weak in one specific sub-topic, based on real feedback from their "
-            "graded work. Produce exactly 4 steps, in this order and using these exact kind values: "
-            "'concept_recap' (a short re-explanation of the core idea), 'guided_questions' (2-3 "
-            "scaffolded questions building up to the concept), 'application_question' (one question "
-            "applying it to a new scenario), 'mastery_check' (a short check the teacher can use to "
-            "verify the gap closed). Each step needs a concrete title, a one-sentence description of "
-            "what it contains, and a realistic estimated minutes. Ground content in the reference "
-            "material when provided; otherwise use general subject knowledge for this topic."
+            "You are a diagnostician reviewing real grader feedback on a group of students who are "
+            "weak in one sub-topic. Your only job is to name the actual underlying misconception or "
+            "skill gap causing these specific mistakes - not to restate the topic name, and not to "
+            "write any teaching material. rootCause should be a precise, specific sentence naming the "
+            "mechanism the students are missing (e.g. 'confusing the sign convention when moving terms "
+            "across the equals sign', not 'struggling with algebra'). severity reflects how fundamental "
+            "the gap is: 'high' if it will block later topics, 'medium' if it's a recoverable slip, "
+            "'low' if it looks like a minor/inconsistent error. recommendedFocus is one sentence telling "
+            "a content writer exactly what to build material around."
         ),
         prompt=(
             f"Subject: {subject}\n"
             f"Weak topic: {topic}\n"
             f"Cohort size: {cohort_size} students\n"
-            f"Sample grader feedback on recent mistakes in this topic:\n{mistakes_text}\n\n"
-            "Generate the 4-step remediation plan."
+            f"Sample grader feedback on recent mistakes:\n{_format_mistakes(sample_mistakes)}"
             + _format_retrieved_context(retrieved_context)
         ),
+        max_output_tokens=1000,
+    )
+
+
+async def generate_remediation_plan(
+    subject: str,
+    topic: str,
+    diagnosis: Diagnosis,
+    cohort_size: int,
+    retrieved_context: Optional[List[str]] = None,
+    reviewer_feedback: Optional[str] = None,
+) -> RemediationPlan:
+    """Agent 2 (Content): writes the actual 4-step plan, targeted at the
+    Diagnostician's finding rather than the raw topic label. If a Reviewer
+    rejected a prior draft, its feedback is folded in as a revision note."""
+    revision_note = (
+        f"\n\nA reviewer rejected your previous draft with this feedback - address it directly in "
+        f"this revision:\n{reviewer_feedback}"
+        if reviewer_feedback
+        else ""
+    )
+    return await _generate_structured(
+        schema=RemediationPlan,
+        system_instruction=(
+            "You are a teacher building a short, structured remediation sequence to assign to a group "
+            "of students, based on a diagnosed root cause (not just the topic name). Produce exactly 4 "
+            "steps, in this order and using these exact kind values: 'concept_recap' (a short "
+            "re-explanation targeting the diagnosed root cause specifically), 'guided_questions' (2-3 "
+            "scaffolded questions that isolate and correct that exact misconception), "
+            "'application_question' (one question applying the corrected understanding to a new "
+            "scenario), 'mastery_check' (a short check the teacher can use to verify the specific gap "
+            "closed). Each step needs a concrete title, a one-sentence description, and a realistic "
+            "estimated minutes. Ground content in the reference material when provided."
+        ),
+        prompt=(
+            f"Subject: {subject}\n"
+            f"Weak topic: {topic}\n"
+            f"Cohort size: {cohort_size} students\n"
+            f"Diagnosed root cause ({diagnosis.severity} severity): {diagnosis.rootCause}\n"
+            f"Recommended focus: {diagnosis.recommendedFocus}\n\n"
+            "Generate the 4-step remediation plan targeting this exact root cause."
+            + _format_retrieved_context(retrieved_context)
+            + revision_note
+        ),
         max_output_tokens=4000,
+    )
+
+
+async def review_remediation_plan(
+    topic: str,
+    diagnosis: Diagnosis,
+    plan: RemediationPlan,
+    sample_mistakes: List[str],
+) -> ReviewVerdict:
+    """Agent 3 (Reviewer): an independent check on whether the plan actually
+    addresses the diagnosed root cause, not just the topic in general."""
+    steps_text = "\n".join(
+        f"{s.order}. [{s.kind}] {s.title} ({s.estMinutes} min): {s.description}" for s in plan.steps
+    )
+    return await _generate_structured(
+        schema=ReviewVerdict,
+        system_instruction=(
+            "You are an independent reviewer checking a colleague's remediation plan before it goes "
+            "out to students. You did not write this plan. Approve it ONLY if its steps concretely "
+            "target the diagnosed root cause below - not just the general topic. Reject it if any step "
+            "is generic filler, misses the specific misconception, or would not plausibly fix the "
+            "sample mistakes shown. feedback must be actionable and specific enough for the writer to "
+            "revise from - if approved, feedback can be a brief note on why it works."
+        ),
+        prompt=(
+            f"Topic: {topic}\n"
+            f"Diagnosed root cause ({diagnosis.severity} severity): {diagnosis.rootCause}\n"
+            f"Recommended focus: {diagnosis.recommendedFocus}\n"
+            f"Sample mistakes this plan must address:\n{_format_mistakes(sample_mistakes)}\n\n"
+            f"Proposed plan:\n{steps_text}\n\n"
+            "Does this plan concretely address the diagnosed root cause?"
+        ),
+        max_output_tokens=800,
     )
 
 

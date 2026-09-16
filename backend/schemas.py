@@ -272,6 +272,29 @@ class GenerateRemediationRequest(BaseModel):
     studentIds: List[str] = Field(min_length=1)
 
 
+# --- Multi-agent remediation pipeline: Diagnostician -> Content -> Reviewer ---
+# Three separate model calls with distinct roles, each grounded only in what
+# the previous agent produced (plus the original evidence), rather than one
+# flat prompt doing everything at once.
+
+DiagnosisSeverity = Literal["low", "medium", "high"]
+
+
+class Diagnosis(BaseModel):
+    """Diagnostician agent's output: what's actually wrong, and how urgent it is."""
+
+    rootCause: str
+    severity: DiagnosisSeverity
+    recommendedFocus: str
+
+
+class ReviewVerdict(BaseModel):
+    """Reviewer agent's output: does the plan actually address the diagnosis?"""
+
+    approved: bool
+    feedback: str
+
+
 class Assignment(BaseModel):
     id: str
     unitId: str
@@ -279,3 +302,6 @@ class Assignment(BaseModel):
     plan: RemediationPlan
     studentIds: List[str]
     createdAt: str
+    diagnosis: Optional[Diagnosis] = None
+    reviewFeedback: Optional[str] = None
+    revised: bool = False

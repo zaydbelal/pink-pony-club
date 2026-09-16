@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from schemas import (
     Assignment,
+    Diagnosis,
     FeynmanEvaluation,
     FeynmanSession,
     LectureNotes,
@@ -107,6 +108,14 @@ CREATE TABLE IF NOT EXISTS assignments (
 CREATE INDEX IF NOT EXISTS idx_assignments_unit ON assignments(unit_id);
 """
 
+# Columns added after the initial release - applied as a best-effort migration
+# so an existing local classpilot.db doesn't need to be deleted by hand.
+_ASSIGNMENT_MIGRATIONS = [
+    "ALTER TABLE assignments ADD COLUMN diagnosis_json TEXT",
+    "ALTER TABLE assignments ADD COLUMN review_feedback TEXT",
+    "ALTER TABLE assignments ADD COLUMN revised INTEGER NOT NULL DEFAULT 0",
+]
+
 
 def get_db() -> sqlite3.Connection:
     global _db
@@ -116,6 +125,11 @@ def get_db() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode = WAL")
     conn.executescript(SCHEMA)
+    for migration in _ASSIGNMENT_MIGRATIONS:
+        try:
+            conn.execute(migration)
+        except sqlite3.OperationalError:
+            pass  # column already exists
     conn.commit()
     _db = conn
     return _db
@@ -466,13 +480,18 @@ class StoredAssignment(BaseModel):
     plan: RemediationPlan
     studentIds: List[str]
     createdAt: str
+    diagnosis: Optional[Diagnosis] = None
+    reviewFeedback: Optional[str] = None
+    revised: bool = False
 
 
 def create_assignment(assignment: StoredAssignment) -> None:
     with _lock:
         get_db().execute(
-            """INSERT INTO assignments (id, unit_id, topic, plan_json, student_ids_json, created_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
+            """INSERT INTO assignments
+                 (id, unit_id, topic, plan_json, student_ids_json, created_at,
+                  diagnosis_json, review_feedback, revised)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 assignment.id,
                 assignment.unitId,
@@ -480,12 +499,16 @@ def create_assignment(assignment: StoredAssignment) -> None:
                 assignment.plan.model_dump_json(),
                 json.dumps(assignment.studentIds),
                 assignment.createdAt,
+                assignment.diagnosis.model_dump_json() if assignment.diagnosis else None,
+                assignment.reviewFeedback,
+                1 if assignment.revised else 0,
             ),
         )
         get_db().commit()
 
 
 def _row_to_assignment(row: sqlite3.Row) -> StoredAssignment:
+    diagnosis_json = row["diagnosis_json"] if "diagnosis_json" in row.keys() else None
     return StoredAssignment(
         id=row["id"],
         unitId=row["unit_id"],
@@ -493,6 +516,9 @@ def _row_to_assignment(row: sqlite3.Row) -> StoredAssignment:
         plan=RemediationPlan.model_validate(json.loads(row["plan_json"])),
         studentIds=json.loads(row["student_ids_json"]),
         createdAt=row["created_at"],
+        diagnosis=Diagnosis.model_validate(json.loads(diagnosis_json)) if diagnosis_json else None,
+        reviewFeedback=row["review_feedback"] if "review_feedback" in row.keys() else None,
+        revised=bool(row["revised"]) if "revised" in row.keys() else False,
     )
 
 

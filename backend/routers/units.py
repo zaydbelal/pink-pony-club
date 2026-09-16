@@ -235,14 +235,33 @@ async def create_remediation(unit_id: str, body: GenerateRemediationRequest):
     sample_mistakes = stat.sampleMistakes if stat else []
 
     retrieved = await retrieve_relevant_chunks(unit_id, body.topic)
+    retrieved_context = [r.text for r in retrieved]
+    cohort_size = len(body.studentIds)
+    subject = unit.syllabus.subject
 
-    plan = await gemini_client.generate_remediation_plan(
-        unit.syllabus.subject,
-        body.topic,
-        sample_mistakes,
-        len(body.studentIds),
-        [r.text for r in retrieved],
+    # Multi-agent pipeline: Diagnostician -> Content -> Reviewer (one revision
+    # pass if the Reviewer rejects the first draft).
+    diagnosis = await gemini_client.diagnose_weak_topic(
+        subject, body.topic, sample_mistakes, cohort_size, retrieved_context
     )
+    plan = await gemini_client.generate_remediation_plan(
+        subject, body.topic, diagnosis, cohort_size, retrieved_context
+    )
+    verdict = await gemini_client.review_remediation_plan(
+        body.topic, diagnosis, plan, sample_mistakes
+    )
+
+    revised = False
+    if not verdict.approved:
+        plan = await gemini_client.generate_remediation_plan(
+            subject,
+            body.topic,
+            diagnosis,
+            cohort_size,
+            retrieved_context,
+            reviewer_feedback=verdict.feedback,
+        )
+        revised = True
 
     assignment = db.StoredAssignment(
         id=str(uuid4()),
@@ -251,6 +270,9 @@ async def create_remediation(unit_id: str, body: GenerateRemediationRequest):
         plan=plan,
         studentIds=body.studentIds,
         createdAt=datetime.now(timezone.utc).isoformat(),
+        diagnosis=diagnosis,
+        reviewFeedback=verdict.feedback,
+        revised=revised,
     )
     db.create_assignment(assignment)
 

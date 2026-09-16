@@ -527,12 +527,28 @@ export default function TeacherPage() {
                           {new Date(a.createdAt).toLocaleString()}
                         </span>
                       </p>
+                      {a.diagnosis && (
+                        <p className="muted">
+                          <span className={`badge ${a.diagnosis.severity === "high" ? "weak" : ""}`}>
+                            diagnosed · {a.diagnosis.severity}
+                          </span>{" "}
+                          {a.diagnosis.rootCause}
+                        </p>
+                      )}
                       {a.plan.steps.map((step) => (
                         <p key={step.order} className="muted">
                           {step.order}. <strong>{step.title}</strong> ({step.estMinutes} min) -{" "}
                           {step.description}
                         </p>
                       ))}
+                      {a.reviewFeedback && (
+                        <p className="muted">
+                          <span className="badge ok">
+                            reviewed{a.revised ? " · revised after feedback" : ""}
+                          </span>{" "}
+                          {a.reviewFeedback}
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>

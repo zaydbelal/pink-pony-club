@@ -227,6 +227,14 @@ export interface GenerateRemediationRequest {
   studentIds: string[];
 }
 
+export type DiagnosisSeverity = "low" | "medium" | "high";
+
+export interface Diagnosis {
+  rootCause: string;
+  severity: DiagnosisSeverity;
+  recommendedFocus: string;
+}
+
 export interface Assignment {
   id: string;
   unitId: string;
@@ -234,4 +242,7 @@ export interface Assignment {
   plan: RemediationPlan;
   studentIds: string[];
   createdAt: string;
+  diagnosis?: Diagnosis | null;
+  reviewFeedback?: string | null;
+  revised: boolean;
 }
