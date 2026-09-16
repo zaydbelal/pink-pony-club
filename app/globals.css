@@ -39,6 +39,15 @@
   --radius: 4px;
   --mascot: none;
   --brand-icon: "\25a0"; /* ■ */
+  --cursor: auto;
+
+  --button-bg: var(--surface-container);
+  --button-bg-hover: var(--surface-container-high);
+  --button-border: var(--outline-variant);
+  --button-fg: var(--on-surface);
+  --button-primary-bg: var(--primary-container);
+  --button-primary-hover: var(--primary);
+  --button-primary-fg: var(--surface-container-lowest);
 }
 
 /*
@@ -111,6 +120,16 @@
   --radius: 16px;
   --mascot: block;
   --brand-icon: "\1f984"; /* 🦄 */
+  --cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><text y="26" font-size="28">🦄</text></svg>') 16 16, auto;
+
+  /* Darker than the surface tones so buttons read clearly against the pink background. */
+  --button-bg: #ff8fbf;
+  --button-bg-hover: #ff6fae;
+  --button-border: #e0356b;
+  --button-fg: #5c1436;
+  --button-primary-bg: #e0356b;
+  --button-primary-hover: #c8225a;
+  --button-primary-fg: #ffffff;
 }
 
 html {
@@ -238,9 +257,9 @@ a {
 }
 
 .theme-toggle button.active {
-  background: var(--primary-container);
-  border-color: var(--primary-container);
-  color: var(--surface-container-lowest);
+  background: var(--button-primary-bg);
+  border-color: var(--button-primary-bg);
+  color: var(--button-primary-fg);
 }
 
 /* --- Pony mascot: a small bouncing pony, only visible in Pink Pony mode --- */
@@ -265,6 +284,12 @@ a {
   50% {
     transform: translateY(-14px) rotate(4deg);
   }
+}
+
+/* High-specificity catch-all so the pony cursor wins over per-element
+   `cursor: pointer`/`text` rules (buttons, links, inputs) in Pony mode. */
+:root[data-theme="pony"] * {
+  cursor: var(--cursor, auto);
 }
 
 /* --- Typography --- */
@@ -376,17 +401,17 @@ button {
   font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  cursor: pointer;
-  border: 1px solid var(--outline-variant);
+  cursor: var(--cursor, pointer);
+  border: 1px solid var(--button-border);
   border-radius: var(--radius-sm);
   padding: 0.55rem 1rem;
-  background: var(--surface-container);
-  color: var(--on-surface);
+  background: var(--button-bg);
+  color: var(--button-fg);
   transition: background 0.15s, border-color 0.15s;
 }
 
 button:hover:not(:disabled) {
-  background: var(--surface-container-high);
+  background: var(--button-bg-hover);
 }
 
 button:disabled {
@@ -395,14 +420,14 @@ button:disabled {
 }
 
 button.primary {
-  background: var(--primary-container);
-  border-color: var(--primary-container);
-  color: var(--surface-container-lowest);
+  background: var(--button-primary-bg);
+  border-color: var(--button-primary-bg);
+  color: var(--button-primary-fg);
   font-weight: 500;
 }
 
 button.primary:hover:not(:disabled) {
-  background: var(--primary);
+  background: var(--button-primary-hover);
 }
 
 /* --- Badges & status --- */
