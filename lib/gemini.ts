@@ -7,6 +7,8 @@ import {
   HintResponseSchema,
   FollowUpMaterialSchema,
   WeeklyReportContentSchema,
+  FeynmanEvaluationSchema,
+  RemediationPlanSchema,
   type SyllabusInput,
   type QuestionPaper,
   type StudentAnswer,
@@ -212,6 +214,79 @@ export async function generateWeeklyReportNarrative(
       `Per-student weak topics:\n${JSON.stringify(perStudentWeakTopics, null, 2)}\n\n` +
       "Write the weekly report.",
     maxOutputTokens: 8000,
+  });
+}
+
+export async function evaluateFeynmanExplanation(
+  subject: string,
+  topic: string,
+  groundingContext: string,
+  explanationText: string,
+  priorAttempts: { attemptNumber: number; clarityPct: number; misconceptionStatement: string | null }[],
+) {
+  return generateStructured({
+    schema: FeynmanEvaluationSchema,
+    systemInstruction:
+      "You are evaluating a student's free-text explanation of a concept, taught back in their " +
+      "own words (the Feynman technique). Judge ONLY against the grounding material given - " +
+      "never introduce facts it doesn't support. Score clarityPct (0-100) on how completely and " +
+      "correctly the explanation covers the grounding material's key causal mechanisms, not on " +
+      "writing quality. List understoodConstructs (specific ideas the student got right) and " +
+      "needsClarity (specific gaps or vague spots) as short phrases, not full sentences. If the " +
+      "explanation contains a genuine factual error or backwards-causality mistake, set " +
+      "misconception to {statement: what they said/implied, deficiency: a short category label " +
+      "e.g. 'structural enzymology', 'pathway topology'} - otherwise set misconception to null; " +
+      "do not invent a misconception just to fill the field. nextGuidedPrompt should be one " +
+      "specific follow-up question that would surface the biggest remaining gap.",
+    prompt:
+      `Subject: ${subject}\n` +
+      `Topic being explained: ${topic}\n\n` +
+      `Grounding material (the only source of truth for judging correctness):\n${groundingContext}\n\n` +
+      (priorAttempts.length
+        ? `Prior attempts on this topic:\n${priorAttempts
+            .map(
+              (a) =>
+                `Attempt ${a.attemptNumber}: ${a.clarityPct}% clarity` +
+                (a.misconceptionStatement ? `, misconception: "${a.misconceptionStatement}"` : ""),
+            )
+            .join("\n")}\n\n`
+        : "") +
+      `Student's explanation (attempt ${priorAttempts.length + 1}):\n"${explanationText}"\n\n` +
+      "Evaluate this explanation.",
+    maxOutputTokens: 4000,
+  });
+}
+
+export async function generateRemediationPlan(
+  subject: string,
+  topic: string,
+  sampleMistakes: string[],
+  cohortSize: number,
+  retrievedContext?: string[],
+) {
+  return generateStructured({
+    schema: RemediationPlanSchema,
+    systemInstruction:
+      "You are a teacher building a short, structured remediation sequence to assign to a group " +
+      "of students who are weak in one specific sub-topic, based on real feedback from their " +
+      "graded work. Produce exactly 4 steps, in this order and using these exact kind values: " +
+      "'concept_recap' (a short re-explanation of the core idea), 'guided_questions' (2-3 " +
+      "scaffolded questions building up to the concept), 'application_question' (one question " +
+      "applying it to a new scenario), 'mastery_check' (a short check the teacher can use to " +
+      "verify the gap closed). Each step needs a concrete title, a one-sentence description of " +
+      "what it contains, and a realistic estimated minutes. Ground content in the reference " +
+      "material when provided; otherwise use general subject knowledge for this topic.",
+    prompt:
+      `Subject: ${subject}\n` +
+      `Weak topic: ${topic}\n` +
+      `Cohort size: ${cohortSize} students\n` +
+      `Sample grader feedback on recent mistakes in this topic:\n` +
+      (sampleMistakes.length
+        ? sampleMistakes.map((m, i) => `${i + 1}. ${m}`).join("\n")
+        : "(no specific feedback available - build a general remediation sequence for this topic)") +
+      "\n\nGenerate the 4-step remediation plan." +
+      formatRetrievedContext(retrievedContext),
+    maxOutputTokens: 4000,
   });
 }
 

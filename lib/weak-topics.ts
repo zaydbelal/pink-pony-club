@@ -1,5 +1,5 @@
-import { getUnit, type StoredSubmission } from "./db";
-import type { TopicStats } from "./schemas";
+import { getUnit, getSubmissionsByUnit, type StoredSubmission } from "./db";
+import type { TopicStats, CohortMember } from "./schemas";
 
 const WEAK_THRESHOLD_PCT = 60;
 const MAX_SAMPLE_MISTAKES_PER_TOPIC = 3;
@@ -74,4 +74,24 @@ export function computeTopicStats(submissions: StoredSubmission[]): TopicStats[]
   });
 
   return stats.sort((a, b) => a.avgScorePct - b.avgScorePct);
+}
+
+/** Students in this unit whose average score on `topic` is below the weak threshold. */
+export function getWeakCohort(unitId: string, topic: string): CohortMember[] {
+  const submissions = getSubmissionsByUnit(unitId);
+  const byStudent = new Map<string, StoredSubmission[]>();
+  for (const s of submissions) {
+    const list = byStudent.get(s.studentId) ?? [];
+    list.push(s);
+    byStudent.set(s.studentId, list);
+  }
+
+  const cohort: CohortMember[] = [];
+  for (const [studentId, studentSubmissions] of byStudent) {
+    const stat = computeTopicStats(studentSubmissions).find((t) => t.topic === topic);
+    if (stat?.isWeak) {
+      cohort.push({ studentId, avgScorePct: stat.avgScorePct });
+    }
+  }
+  return cohort.sort((a, b) => a.avgScorePct - b.avgScorePct);
 }

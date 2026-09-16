@@ -9,6 +9,8 @@ import type {
   TopicStats,
   FollowUpMaterial,
   HintResponse,
+  FeynmanEvaluation,
+  FeynmanSession,
 } from "@/lib/schemas";
 
 interface StudentUnit {
@@ -36,6 +38,12 @@ export default function StudentPage() {
   const [followUp, setFollowUp] = useState<FollowUpMaterial | null>(null);
   const [followUpLoading, setFollowUpLoading] = useState(false);
   const [revealedAnswers, setRevealedAnswers] = useState<Record<string, boolean>>({});
+
+  const [feynmanTopic, setFeynmanTopic] = useState("");
+  const [feynmanExplanation, setFeynmanExplanation] = useState("");
+  const [feynmanLoading, setFeynmanLoading] = useState(false);
+  const [feynmanEvaluation, setFeynmanEvaluation] = useState<FeynmanEvaluation | null>(null);
+  const [feynmanHistory, setFeynmanHistory] = useState<FeynmanSession[]>([]);
 
   const [practiceProblem, setPracticeProblem] = useState("");
   const [practiceAttempt, setPracticeAttempt] = useState("");
@@ -76,6 +84,31 @@ export default function StudentPage() {
     setSelectedUnitId(unit.id);
     setAnswers({});
     setGrade(null);
+    setFeynmanTopic("");
+    setFeynmanExplanation("");
+    setFeynmanEvaluation(null);
+    setFeynmanHistory([]);
+  }
+
+  async function submitFeynman() {
+    if (!selectedUnit || !feynmanTopic || !feynmanExplanation.trim()) return;
+    setFeynmanLoading(true);
+    setError(null);
+    try {
+      const res = await apiFetch<{ session: FeynmanSession; attemptHistory: FeynmanSession[] }>(
+        `/api/units/${selectedUnit.id}/feynman`,
+        {
+          method: "POST",
+          body: JSON.stringify({ studentId, topic: feynmanTopic, explanationText: feynmanExplanation }),
+        },
+      );
+      setFeynmanEvaluation(res.session.evaluation);
+      setFeynmanHistory(res.attemptHistory);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to evaluate explanation");
+    } finally {
+      setFeynmanLoading(false);
+    }
   }
 
   async function submitPaper() {
@@ -246,6 +279,115 @@ export default function StudentPage() {
                 </div>
               )}
             </div>
+          )}
+
+          {selectedUnit && (
+            <>
+              <h2>Feynman Mode — explain it back</h2>
+              <div className="card">
+                <p className="muted">
+                  Teach a topic in your own words. The AI checks it against the unit&apos;s real
+                  notes and questions - not multiple choice - and tells you what&apos;s still
+                  unclear.
+                </p>
+                <label>Topic</label>
+                <select
+                  value={feynmanTopic}
+                  onChange={(e) => {
+                    setFeynmanTopic(e.target.value);
+                    setFeynmanEvaluation(null);
+                    setFeynmanHistory([]);
+                  }}
+                >
+                  <option value="">Select a topic...</option>
+                  {Array.from(new Set(selectedUnit.paper.questions.map((q) => q.topic))).map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+
+                {feynmanTopic && (
+                  <>
+                    <label>Your explanation (attempt {feynmanHistory.length + 1})</label>
+                    <textarea
+                      value={feynmanExplanation}
+                      onChange={(e) => setFeynmanExplanation(e.target.value)}
+                      placeholder="Explain this topic as if you were teaching another student..."
+                    />
+                    <button
+                      className="primary"
+                      disabled={feynmanLoading || !feynmanExplanation.trim()}
+                      onClick={submitFeynman}
+                    >
+                      {feynmanLoading ? "Evaluating..." : "Evaluate explanation"}
+                    </button>
+                  </>
+                )}
+
+                {feynmanEvaluation && (
+                  <div className="card">
+                    <h3>Clarity: {feynmanEvaluation.clarityPct.toFixed(0)}%</h3>
+                    {feynmanEvaluation.understoodConstructs.length > 0 && (
+                      <>
+                        <p>
+                          <strong>Understood:</strong>
+                        </p>
+                        {feynmanEvaluation.understoodConstructs.map((c, i) => (
+                          <p key={i} className="muted">
+                            ✓ {c}
+                          </p>
+                        ))}
+                      </>
+                    )}
+                    {feynmanEvaluation.needsClarity.length > 0 && (
+                      <>
+                        <p>
+                          <strong>Needs clarity:</strong>
+                        </p>
+                        {feynmanEvaluation.needsClarity.map((c, i) => (
+                          <p key={i} className="muted">
+                            ▲ {c}
+                          </p>
+                        ))}
+                      </>
+                    )}
+                    {feynmanEvaluation.misconception && (
+                      <div className="card">
+                        <span className="badge weak">Misconception detected</span>
+                        <p>{feynmanEvaluation.misconception.statement}</p>
+                        <p className="muted">{feynmanEvaluation.misconception.deficiency}</p>
+                      </div>
+                    )}
+                    <p>
+                      <strong>Next prompt:</strong> {feynmanEvaluation.nextGuidedPrompt}
+                    </p>
+                  </div>
+                )}
+
+                {feynmanHistory.length > 0 && (
+                  <div className="card">
+                    <strong>Attempt history</strong>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Attempt</th>
+                          <th>Clarity</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {feynmanHistory.map((s) => (
+                          <tr key={s.id}>
+                            <td>{s.attemptNumber}</td>
+                            <td>{s.evaluation.clarityPct.toFixed(0)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
           )}
 
           <h2>Your weak topics</h2>

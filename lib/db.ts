@@ -9,6 +9,8 @@ import type {
   Unit,
   UnitStatus,
   WeeklyReportContent,
+  FeynmanEvaluation,
+  RemediationPlan,
 } from "./schemas";
 
 let db: Database.Database | null = null;
@@ -70,6 +72,28 @@ function getDb(): Database.Database {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_reports_teacher ON reports(teacher_id);
+
+    CREATE TABLE IF NOT EXISTS feynman_sessions (
+      id TEXT PRIMARY KEY,
+      unit_id TEXT NOT NULL REFERENCES units(id),
+      student_id TEXT NOT NULL,
+      topic TEXT NOT NULL,
+      attempt_number INTEGER NOT NULL,
+      explanation_text TEXT NOT NULL,
+      evaluation_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_feynman_student_topic ON feynman_sessions(student_id, unit_id, topic);
+
+    CREATE TABLE IF NOT EXISTS assignments (
+      id TEXT PRIMARY KEY,
+      unit_id TEXT NOT NULL REFERENCES units(id),
+      topic TEXT NOT NULL,
+      plan_json TEXT NOT NULL,
+      student_ids_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_assignments_unit ON assignments(unit_id);
   `);
   return db;
 }
@@ -366,4 +390,125 @@ export function listReports(teacherId?: string): StoredReport[] {
 
 export function getLatestReport(teacherId?: string): StoredReport | undefined {
   return listReports(teacherId)[0];
+}
+
+export interface StoredFeynmanSession {
+  id: string;
+  unitId: string;
+  studentId: string;
+  topic: string;
+  attemptNumber: number;
+  explanationText: string;
+  evaluation: FeynmanEvaluation;
+  createdAt: string;
+}
+
+export function createFeynmanSession(session: StoredFeynmanSession): void {
+  getDb()
+    .prepare(
+      `INSERT INTO feynman_sessions
+         (id, unit_id, student_id, topic, attempt_number, explanation_text, evaluation_json, created_at)
+       VALUES (@id, @unit_id, @student_id, @topic, @attempt_number, @explanation_text, @evaluation_json, @created_at)`,
+    )
+    .run({
+      id: session.id,
+      unit_id: session.unitId,
+      student_id: session.studentId,
+      topic: session.topic,
+      attempt_number: session.attemptNumber,
+      explanation_text: session.explanationText,
+      evaluation_json: JSON.stringify(session.evaluation),
+      created_at: session.createdAt,
+    });
+}
+
+interface FeynmanSessionRow {
+  id: string;
+  unit_id: string;
+  student_id: string;
+  topic: string;
+  attempt_number: number;
+  explanation_text: string;
+  evaluation_json: string;
+  created_at: string;
+}
+
+function rowToFeynmanSession(row: FeynmanSessionRow): StoredFeynmanSession {
+  return {
+    id: row.id,
+    unitId: row.unit_id,
+    studentId: row.student_id,
+    topic: row.topic,
+    attemptNumber: row.attempt_number,
+    explanationText: row.explanation_text,
+    evaluation: JSON.parse(row.evaluation_json) as FeynmanEvaluation,
+    createdAt: row.created_at,
+  };
+}
+
+export function getFeynmanSessions(
+  unitId: string,
+  studentId: string,
+  topic: string,
+): StoredFeynmanSession[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT * FROM feynman_sessions
+       WHERE unit_id = ? AND student_id = ? AND topic = ?
+       ORDER BY attempt_number ASC`,
+    )
+    .all(unitId, studentId, topic) as FeynmanSessionRow[];
+  return rows.map(rowToFeynmanSession);
+}
+
+export interface StoredAssignment {
+  id: string;
+  unitId: string;
+  topic: string;
+  plan: RemediationPlan;
+  studentIds: string[];
+  createdAt: string;
+}
+
+export function createAssignment(assignment: StoredAssignment): void {
+  getDb()
+    .prepare(
+      `INSERT INTO assignments (id, unit_id, topic, plan_json, student_ids_json, created_at)
+       VALUES (@id, @unit_id, @topic, @plan_json, @student_ids_json, @created_at)`,
+    )
+    .run({
+      id: assignment.id,
+      unit_id: assignment.unitId,
+      topic: assignment.topic,
+      plan_json: JSON.stringify(assignment.plan),
+      student_ids_json: JSON.stringify(assignment.studentIds),
+      created_at: assignment.createdAt,
+    });
+}
+
+interface AssignmentRow {
+  id: string;
+  unit_id: string;
+  topic: string;
+  plan_json: string;
+  student_ids_json: string;
+  created_at: string;
+}
+
+function rowToAssignment(row: AssignmentRow): StoredAssignment {
+  return {
+    id: row.id,
+    unitId: row.unit_id,
+    topic: row.topic,
+    plan: JSON.parse(row.plan_json) as RemediationPlan,
+    studentIds: JSON.parse(row.student_ids_json) as string[],
+    createdAt: row.created_at,
+  };
+}
+
+export function listAssignmentsByUnit(unitId: string): StoredAssignment[] {
+  const rows = getDb()
+    .prepare(`SELECT * FROM assignments WHERE unit_id = ? ORDER BY created_at DESC`)
+    .all(unitId) as AssignmentRow[];
+  return rows.map(rowToAssignment);
 }

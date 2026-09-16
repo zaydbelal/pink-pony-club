@@ -205,3 +205,86 @@ export const GenerateReportRequestSchema = z.object({
   sinceDays: z.number().int().min(1).max(90).optional(),
 });
 export type GenerateReportRequest = z.infer<typeof GenerateReportRequestSchema>;
+
+// --- Feynman Mode: student explains a topic back, AI scores clarity and finds gaps ---
+
+export const MisconceptionSchema = z.object({
+  statement: z.string(),
+  deficiency: z.string(),
+});
+export type Misconception = z.infer<typeof MisconceptionSchema>;
+
+export const FeynmanEvaluationSchema = z.object({
+  clarityPct: z.number().min(0).max(100),
+  understoodConstructs: z.array(z.string()),
+  needsClarity: z.array(z.string()),
+  misconception: MisconceptionSchema.nullable(),
+  nextGuidedPrompt: z.string(),
+});
+export type FeynmanEvaluation = z.infer<typeof FeynmanEvaluationSchema>;
+
+export const FeynmanEvaluateRequestSchema = z.object({
+  studentId: z.string().min(1),
+  topic: z.string().min(1),
+  explanationText: z.string().min(1),
+});
+export type FeynmanEvaluateRequest = z.infer<typeof FeynmanEvaluateRequestSchema>;
+
+export const FeynmanSessionSchema = z.object({
+  id: z.string(),
+  unitId: z.string(),
+  studentId: z.string(),
+  topic: z.string(),
+  attemptNumber: z.number().int().min(1),
+  explanationText: z.string(),
+  evaluation: FeynmanEvaluationSchema,
+  createdAt: z.string(),
+});
+export type FeynmanSession = z.infer<typeof FeynmanSessionSchema>;
+
+// --- Teacher remediation: generate and dispatch a step-by-step plan to a weak cohort ---
+
+export const RemediationStepKindSchema = z.enum([
+  "concept_recap",
+  "guided_questions",
+  "application_question",
+  "mastery_check",
+]);
+export type RemediationStepKind = z.infer<typeof RemediationStepKindSchema>;
+
+export const RemediationStepSchema = z.object({
+  order: z.number().int().min(1),
+  kind: RemediationStepKindSchema,
+  title: z.string(),
+  description: z.string(),
+  estMinutes: z.number().int().min(1),
+});
+export type RemediationStep = z.infer<typeof RemediationStepSchema>;
+
+export const RemediationPlanSchema = z.object({
+  topic: z.string(),
+  steps: z.array(RemediationStepSchema).min(1),
+});
+export type RemediationPlan = z.infer<typeof RemediationPlanSchema>;
+
+export const CohortMemberSchema = z.object({
+  studentId: z.string(),
+  avgScorePct: z.number(),
+});
+export type CohortMember = z.infer<typeof CohortMemberSchema>;
+
+export const GenerateRemediationRequestSchema = z.object({
+  topic: z.string().min(1),
+  studentIds: z.array(z.string().min(1)).min(1),
+});
+export type GenerateRemediationRequest = z.infer<typeof GenerateRemediationRequestSchema>;
+
+export const AssignmentSchema = z.object({
+  id: z.string(),
+  unitId: z.string(),
+  topic: z.string(),
+  plan: RemediationPlanSchema,
+  studentIds: z.array(z.string()),
+  createdAt: z.string(),
+});
+export type Assignment = z.infer<typeof AssignmentSchema>;

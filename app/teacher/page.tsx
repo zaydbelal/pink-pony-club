@@ -9,6 +9,8 @@ import type {
   TopicStats,
   Report,
   SyllabusInput,
+  CohortMember,
+  Assignment,
 } from "@/lib/schemas";
 
 const TEACHER_ID_KEY = "classpilot.teacherId";
@@ -38,6 +40,13 @@ export default function TeacherPage() {
   const [regenerating, setRegenerating] = useState(false);
 
   const [unitWeakTopics, setUnitWeakTopics] = useState<TopicStats[]>([]);
+
+  const [remediationTopic, setRemediationTopic] = useState("");
+  const [cohort, setCohort] = useState<CohortMember[]>([]);
+  const [cohortLoading, setCohortLoading] = useState(false);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<Record<string, boolean>>({});
+  const [generatingRemediation, setGeneratingRemediation] = useState(false);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
 
   const [recipientEmail, setRecipientEmail] = useState("teacher@example.com");
   const [sinceDays, setSinceDays] = useState(7);
@@ -71,7 +80,11 @@ export default function TeacherPage() {
     setSelectedUnitId(unit.id);
     setNotesDraft(unit.notes);
     setPaperDraft(unit.paper);
+    setRemediationTopic("");
+    setCohort([]);
+    setSelectedStudentIds({});
     void refreshUnitWeakTopics(unit.id);
+    void refreshAssignments(unit.id);
   }
 
   async function refreshUnitWeakTopics(unitId: string) {
@@ -80,6 +93,55 @@ export default function TeacherPage() {
       setUnitWeakTopics(res.topicStats);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load weak topics");
+    }
+  }
+
+  async function refreshAssignments(unitId: string) {
+    try {
+      const res = await apiFetch<{ assignments: Assignment[] }>(`/api/units/${unitId}/remediation`);
+      setAssignments(res.assignments);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load assignments");
+    }
+  }
+
+  async function loadCohort(topic: string) {
+    if (!selectedUnitId) return;
+    setRemediationTopic(topic);
+    setCohortLoading(true);
+    setError(null);
+    try {
+      const res = await apiFetch<{ cohort: CohortMember[] }>(
+        `/api/units/${selectedUnitId}/cohort?topic=${encodeURIComponent(topic)}`,
+      );
+      setCohort(res.cohort);
+      setSelectedStudentIds(Object.fromEntries(res.cohort.map((c) => [c.studentId, true])));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load cohort");
+    } finally {
+      setCohortLoading(false);
+    }
+  }
+
+  async function dispatchRemediation() {
+    if (!selectedUnitId || !remediationTopic) return;
+    const studentIds = Object.entries(selectedStudentIds)
+      .filter(([, checked]) => checked)
+      .map(([id]) => id);
+    if (studentIds.length === 0) return;
+
+    setGeneratingRemediation(true);
+    setError(null);
+    try {
+      const res = await apiFetch<{ assignment: Assignment }>(`/api/units/${selectedUnitId}/remediation`, {
+        method: "POST",
+        body: JSON.stringify({ topic: remediationTopic, studentIds }),
+      });
+      setAssignments((a) => [res.assignment, ...a]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to generate remediation plan");
+    } finally {
+      setGeneratingRemediation(false);
     }
   }
 
@@ -389,6 +451,90 @@ export default function TeacherPage() {
                   </table>
                 )}
               </div>
+
+              <h3>Assign remediation</h3>
+              <div className="card col">
+                <p className="muted">
+                  Pick a weak topic to see which students in this unit are struggling with it,
+                  then generate and dispatch a 4-step remediation sequence to that cohort.
+                </p>
+                <div className="row">
+                  {unitWeakTopics
+                    .filter((t) => t.isWeak)
+                    .map((t) => (
+                      <button
+                        key={t.topic}
+                        onClick={() => loadCohort(t.topic)}
+                        disabled={cohortLoading}
+                        style={remediationTopic === t.topic ? { borderColor: "#2563eb" } : undefined}
+                      >
+                        {t.topic} ({t.avgScorePct.toFixed(0)}%)
+                      </button>
+                    ))}
+                  {unitWeakTopics.filter((t) => t.isWeak).length === 0 && (
+                    <p className="muted">No weak topics in this unit yet.</p>
+                  )}
+                </div>
+
+                {remediationTopic && (
+                  <>
+                    {cohortLoading && <p className="muted">Loading cohort...</p>}
+                    {!cohortLoading && cohort.length === 0 && (
+                      <p className="muted">No students currently weak in this topic.</p>
+                    )}
+                    {cohort.length > 0 && (
+                      <div className="col">
+                        <strong>Cohort ({cohort.length} students)</strong>
+                        {cohort.map((c) => (
+                          <label key={c.studentId} style={{ fontWeight: "normal" }}>
+                            <input
+                              type="checkbox"
+                              checked={selectedStudentIds[c.studentId] ?? false}
+                              onChange={(e) =>
+                                setSelectedStudentIds((s) => ({ ...s, [c.studentId]: e.target.checked }))
+                              }
+                            />{" "}
+                            {c.studentId} ({c.avgScorePct.toFixed(0)}%)
+                          </label>
+                        ))}
+                        <button
+                          className="primary"
+                          disabled={
+                            generatingRemediation ||
+                            Object.values(selectedStudentIds).every((v) => !v)
+                          }
+                          onClick={dispatchRemediation}
+                        >
+                          {generatingRemediation ? "Generating..." : "Generate & assign"}
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {assignments.length > 0 && (
+                <div className="card">
+                  <strong>Dispatched assignments</strong>
+                  {assignments.map((a) => (
+                    <div key={a.id} className="card">
+                      <p>
+                        <strong>{a.plan.topic}</strong>{" "}
+                        <span className="muted">
+                          - {a.studentIds.length} student{a.studentIds.length === 1 ? "" : "s"} -{" "}
+                          {new Date(a.createdAt).toLocaleString()}
+                        </span>
+                      </p>
+                      {a.plan.steps.map((step) => (
+                        <p key={step.order} className="muted">
+                          {step.order}. <strong>{step.title}</strong> ({step.estMinutes} min) -{" "}
+                          {step.description}
+                        </p>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
             </>
           )}
 
