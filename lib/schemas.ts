@@ -22,6 +22,7 @@ export type LectureNotes = z.infer<typeof LectureNotesSchema>;
 export const QuestionSchema = z.object({
   id: z.string(),
   type: z.enum(["short_answer", "long_answer", "mcq"]),
+  topic: z.string(),
   prompt: z.string(),
   options: z.array(z.string()).optional(),
   answerKey: z.string(),
@@ -83,9 +84,77 @@ export function toStudentPaper(paper: QuestionPaper): StudentQuestionPaper {
     questions: paper.questions.map((question) => ({
       id: question.id,
       type: question.type,
+      topic: question.topic,
       prompt: question.prompt,
       options: question.options,
       points: question.points,
     })),
   };
 }
+
+export const UnitStatusSchema = z.enum(["draft", "published"]);
+export type UnitStatus = z.infer<typeof UnitStatusSchema>;
+
+export const UnitSchema = z.object({
+  id: z.string(),
+  status: UnitStatusSchema,
+  syllabus: SyllabusInputSchema,
+  notes: LectureNotesSchema,
+  paper: QuestionPaperSchema,
+  createdAt: z.string(),
+});
+export type Unit = z.infer<typeof UnitSchema>;
+
+export const CreateUnitRequestSchema = z.object({
+  syllabus: SyllabusInputSchema,
+  numQuestions: z.number().int().min(1).max(30).optional(),
+});
+export type CreateUnitRequest = z.infer<typeof CreateUnitRequestSchema>;
+
+export const PatchUnitRequestSchema = z.object({
+  notes: LectureNotesSchema.optional(),
+  paper: QuestionPaperSchema.optional(),
+});
+export type PatchUnitRequest = z.infer<typeof PatchUnitRequestSchema>;
+
+export const CreateSubmissionRequestSchema = z.object({
+  unitId: z.string(),
+  studentId: z.string(),
+  answers: z.array(StudentAnswerSchema),
+});
+export type CreateSubmissionRequest = z.infer<typeof CreateSubmissionRequestSchema>;
+
+export const Submission = z.object({
+  id: z.string(),
+  unitId: z.string(),
+  studentId: z.string(),
+  answers: z.array(StudentAnswerSchema),
+  grade: PaperGradeSchema,
+  createdAt: z.string(),
+});
+export type Submission = z.infer<typeof Submission>;
+
+export const TopicStatsSchema = z.object({
+  topic: z.string(),
+  correctCount: z.number(),
+  partialCount: z.number(),
+  incorrectCount: z.number(),
+  scoredPoints: z.number(),
+  maxPoints: z.number(),
+  avgScorePct: z.number(),
+  isWeak: z.boolean(),
+  sampleMistakes: z.array(z.string()),
+});
+export type TopicStats = z.infer<typeof TopicStatsSchema>;
+
+export const FollowUpRequestSchema = z.object({
+  topic: z.string(),
+});
+export type FollowUpRequest = z.infer<typeof FollowUpRequestSchema>;
+
+export const FollowUpMaterialSchema = z.object({
+  topic: z.string(),
+  remedialNotes: z.string(),
+  practiceQuestions: z.array(QuestionSchema).min(1),
+});
+export type FollowUpMaterial = z.infer<typeof FollowUpMaterialSchema>;

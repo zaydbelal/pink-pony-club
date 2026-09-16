@@ -5,6 +5,7 @@ import {
   PaperGradeSchema,
   QuestionPaperSchema,
   HintResponseSchema,
+  FollowUpMaterialSchema,
   type SyllabusInput,
   type QuestionPaper,
   type StudentAnswer,
@@ -90,7 +91,10 @@ export async function generateQuestionPaper(
       "internal answer key and a short grading rubric - these are for the teacher/grader only " +
       "and must never be shown to students. Mix question types where appropriate " +
       "(short_answer, long_answer, mcq) and give each question a point value. " +
-      "Every question id must be unique.",
+      "Every question id must be unique. Every question must also have a short topic label " +
+      "(2-5 words, e.g. 'fraction subtraction' or 'photosynthesis - light reactions') naming " +
+      "the specific sub-topic it tests, granular enough to be useful for tracking which exact " +
+      "sub-topics a student is weak in - do not just reuse the unit title as the topic.",
     prompt:
       `Subject: ${input.subject}\n` +
       `Unit: ${input.unitTitle}\n` +
@@ -124,6 +128,33 @@ export async function gradeSubmission(
       "will see. totalScore/maxScore must equal the sum of the per-question scores/maxScores.",
     prompt: `Grade this submission:\n${JSON.stringify(gradingInput, null, 2)}`,
     maxOutputTokens: 16000,
+  });
+}
+
+export async function generateFollowUpMaterial(
+  subject: string,
+  topic: string,
+  sampleMistakes: string[],
+) {
+  return generateStructured({
+    schema: FollowUpMaterialSchema,
+    systemInstruction:
+      "You are an experienced teacher writing targeted remedial material for a small group of " +
+      "students who are struggling with one specific sub-topic, based on real feedback from " +
+      "their graded submissions. Write short remedial notes (a few paragraphs, not a full " +
+      "lecture) that directly address the pattern of mistakes shown, then write 2-4 new " +
+      "practice questions targeting exactly this sub-topic, each with an answer key, rubric, " +
+      "point value, and this same topic label. Do not repeat the mistakes verbatim - use them " +
+      "only to diagnose what to re-teach.",
+    prompt:
+      `Subject: ${subject}\n` +
+      `Weak topic: ${topic}\n` +
+      `Sample grader feedback on recent mistakes in this topic:\n` +
+      (sampleMistakes.length
+        ? sampleMistakes.map((m, i) => `${i + 1}. ${m}`).join("\n")
+        : "(no specific feedback available - write general remedial material for this topic)") +
+      "\n\nGenerate the remedial notes and practice questions.",
+    maxOutputTokens: 8000,
   });
 }
 
