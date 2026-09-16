@@ -97,6 +97,7 @@ export type UnitStatus = z.infer<typeof UnitStatusSchema>;
 
 export const UnitSchema = z.object({
   id: z.string(),
+  teacherId: z.string(),
   status: UnitStatusSchema,
   syllabus: SyllabusInputSchema,
   notes: LectureNotesSchema,
@@ -106,6 +107,7 @@ export const UnitSchema = z.object({
 export type Unit = z.infer<typeof UnitSchema>;
 
 export const CreateUnitRequestSchema = z.object({
+  teacherId: z.string().min(1).default("demo-teacher"),
   syllabus: SyllabusInputSchema,
   numQuestions: z.number().int().min(1).max(30).optional(),
 });
@@ -158,3 +160,48 @@ export const FollowUpMaterialSchema = z.object({
   practiceQuestions: z.array(QuestionSchema).min(1),
 });
 export type FollowUpMaterial = z.infer<typeof FollowUpMaterialSchema>;
+
+export const AddDocumentRequestSchema = z.object({
+  title: z.string().min(1),
+  sourceText: z.string().min(1),
+});
+export type AddDocumentRequest = z.infer<typeof AddDocumentRequestSchema>;
+
+export const RetrievedChunkSchema = z.object({
+  documentTitle: z.string(),
+  text: z.string(),
+  similarity: z.number(),
+});
+export type RetrievedChunk = z.infer<typeof RetrievedChunkSchema>;
+
+export const WeeklyReportContentSchema = z.object({
+  subject: z.string(),
+  headline: z.string(),
+  classSummary: z.string(),
+  studentsNeedingAttention: z.array(
+    z.object({
+      studentId: z.string(),
+      reason: z.string(),
+    }),
+  ),
+  recommendedActions: z.array(z.string()),
+});
+export type WeeklyReportContent = z.infer<typeof WeeklyReportContentSchema>;
+
+export const ReportSchema = z.object({
+  id: z.string(),
+  periodStart: z.string(),
+  periodEnd: z.string(),
+  recipientEmail: z.string(),
+  content: WeeklyReportContentSchema,
+  emailSent: z.boolean(),
+  createdAt: z.string(),
+});
+export type Report = z.infer<typeof ReportSchema>;
+
+export const GenerateReportRequestSchema = z.object({
+  teacherId: z.string().min(1).default("demo-teacher"),
+  recipientEmail: z.string().default("teacher@example.com"),
+  sinceDays: z.number().int().min(1).max(90).optional(),
+});
+export type GenerateReportRequest = z.infer<typeof GenerateReportRequestSchema>;

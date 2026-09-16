@@ -3,6 +3,7 @@ import { FollowUpRequestSchema } from "@/lib/schemas";
 import { getSubmissionsByStudent, getUnit } from "@/lib/db";
 import { computeTopicStats } from "@/lib/weak-topics";
 import { generateFollowUpMaterial } from "@/lib/gemini";
+import { retrieveRelevantChunks } from "@/lib/rag";
 import { handleRouteError } from "@/lib/api-utils";
 
 export async function POST(
@@ -23,13 +24,21 @@ export async function POST(
       );
     }
 
-    const subject =
-      submissions
-        .map((s) => getUnit(s.unitId))
-        .find((unit) => unit?.paper.questions.some((q) => q.topic === body.topic))?.syllabus
-        .subject ?? "General";
+    const matchingUnit = submissions
+      .map((s) => getUnit(s.unitId))
+      .find((unit) => unit?.paper.questions.some((q) => q.topic === body.topic));
+    const subject = matchingUnit?.syllabus.subject ?? "General";
 
-    const followUp = await generateFollowUpMaterial(subject, body.topic, stat.sampleMistakes);
+    const retrieved = matchingUnit
+      ? await retrieveRelevantChunks(matchingUnit.id, body.topic)
+      : [];
+
+    const followUp = await generateFollowUpMaterial(
+      subject,
+      body.topic,
+      stat.sampleMistakes,
+      retrieved.map((r) => r.text),
+    );
 
     return NextResponse.json({ followUp, topicStats: stat });
   } catch (error) {

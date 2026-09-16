@@ -47,3 +47,186 @@ a {
     color-scheme: dark;
   }
 }
+
+/* Minimal functional styling - not a design system, just enough to demo the pipeline. */
+
+.page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+  width: 100%;
+}
+
+.nav {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.3);
+}
+
+.nav a {
+  font-weight: 600;
+}
+
+h1 {
+  font-size: 1.6rem;
+  margin-bottom: 0.25rem;
+}
+
+h2 {
+  font-size: 1.2rem;
+  margin: 1.5rem 0 0.75rem;
+}
+
+h3 {
+  font-size: 1rem;
+  margin: 1rem 0 0.5rem;
+}
+
+p {
+  margin: 0.4rem 0;
+  line-height: 1.5;
+}
+
+.muted {
+  opacity: 0.7;
+  font-size: 0.9rem;
+}
+
+.card {
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin: 0.75rem 0;
+}
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+}
+
+textarea {
+  width: 100%;
+  min-height: 5rem;
+  resize: vertical;
+}
+
+label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  border-radius: 6px;
+  padding: 0.5rem 0.9rem;
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  color: inherit;
+}
+
+button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--foreground) 14%, transparent);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: white;
+}
+
+button.primary:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 10%, transparent);
+}
+
+.badge.weak {
+  background: #fecaca;
+  color: #7f1d1d;
+}
+
+.badge.ok {
+  background: #bbf7d0;
+  color: #14532d;
+}
+
+.badge.draft {
+  background: #fde68a;
+  color: #78350f;
+}
+
+.badge.published {
+  background: #bbf7d0;
+  color: #14532d;
+}
+
+.error-box {
+  border: 1px solid #f87171;
+  background: #fef2f2;
+  color: #7f1d1d;
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.9rem;
+}
+
+.list-item {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+  cursor: pointer;
+}
+
+.list-item:hover {
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+}
+
+.list-item.selected {
+  background: color-mix(in srgb, #2563eb 12%, transparent);
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9rem;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+}

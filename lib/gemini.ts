@@ -6,15 +6,43 @@ import {
   QuestionPaperSchema,
   HintResponseSchema,
   FollowUpMaterialSchema,
+  WeeklyReportContentSchema,
   type SyllabusInput,
   type QuestionPaper,
   type StudentAnswer,
   type HintRequest,
+  type TopicStats,
 } from "./schemas";
 
 const MODEL = process.env.GEMINI_MODEL?.trim() || "gemini-3.6-flash";
+const EMBEDDING_MODEL = process.env.GEMINI_EMBEDDING_MODEL?.trim() || "gemini-embedding-001";
 
 const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+/** Embeds a batch of texts, returning one vector per input in the same order. */
+export async function embedTexts(texts: string[]): Promise<number[][]> {
+  const response = await client.models.embedContent({
+    model: EMBEDDING_MODEL,
+    contents: texts,
+  });
+  const embeddings = response.embeddings;
+  if (!embeddings || embeddings.length !== texts.length) {
+    throw new Error("Gemini embedding response didn't match the number of inputs");
+  }
+  return embeddings.map((e) => {
+    if (!e.values) throw new Error("Gemini returned an embedding with no values");
+    return e.values;
+  });
+}
+
+function formatRetrievedContext(chunks?: string[]): string {
+  if (!chunks || chunks.length === 0) return "";
+  return (
+    "\n\nReference material retrieved from the teacher's knowledge base (use this as your " +
+    "primary source where relevant, in addition to the syllabus above):\n" +
+    chunks.map((c, i) => `--- excerpt ${i + 1} ---\n${c}`).join("\n\n")
+  );
+}
 
 /** Gemini's responseJsonSchema only supports a subset of JSON Schema keywords - strip the rest. */
 function toResponseJsonSchema(schema: ZodType) {
@@ -61,7 +89,7 @@ async function generateStructured<T>(options: {
   return result.data;
 }
 
-export async function generateLectureNotes(input: SyllabusInput) {
+export async function generateLectureNotes(input: SyllabusInput, retrievedContext?: string[]) {
   return generateStructured({
     schema: LectureNotesSchema,
     systemInstruction:
@@ -74,7 +102,8 @@ export async function generateLectureNotes(input: SyllabusInput) {
       `Unit: ${input.unitTitle}\n` +
       (input.gradeLevel ? `Grade level: ${input.gradeLevel}\n` : "") +
       `Syllabus:\n${input.syllabusText}\n\n` +
-      "Generate the lecture notes for this unit.",
+      "Generate the lecture notes for this unit." +
+      formatRetrievedContext(retrievedContext),
     maxOutputTokens: 16000,
   });
 }
@@ -82,6 +111,7 @@ export async function generateLectureNotes(input: SyllabusInput) {
 export async function generateQuestionPaper(
   input: SyllabusInput,
   numQuestions = 6,
+  retrievedContext?: string[],
 ) {
   return generateStructured({
     schema: QuestionPaperSchema,
@@ -100,7 +130,8 @@ export async function generateQuestionPaper(
       `Unit: ${input.unitTitle}\n` +
       (input.gradeLevel ? `Grade level: ${input.gradeLevel}\n` : "") +
       `Syllabus:\n${input.syllabusText}\n\n` +
-      `Generate a question paper with exactly ${numQuestions} questions covering this syllabus.`,
+      `Generate a question paper with exactly ${numQuestions} questions covering this syllabus.` +
+      formatRetrievedContext(retrievedContext),
     maxOutputTokens: 16000,
   });
 }
@@ -135,6 +166,7 @@ export async function generateFollowUpMaterial(
   subject: string,
   topic: string,
   sampleMistakes: string[],
+  retrievedContext?: string[],
 ) {
   return generateStructured({
     schema: FollowUpMaterialSchema,
@@ -145,7 +177,8 @@ export async function generateFollowUpMaterial(
       "lecture) that directly address the pattern of mistakes shown, then write 2-4 new " +
       "practice questions targeting exactly this sub-topic, each with an answer key, rubric, " +
       "point value, and this same topic label. Do not repeat the mistakes verbatim - use them " +
-      "only to diagnose what to re-teach.",
+      "only to diagnose what to re-teach. If reference material is provided, ground your " +
+      "explanation in it rather than general knowledge.",
     prompt:
       `Subject: ${subject}\n` +
       `Weak topic: ${topic}\n` +
@@ -153,7 +186,31 @@ export async function generateFollowUpMaterial(
       (sampleMistakes.length
         ? sampleMistakes.map((m, i) => `${i + 1}. ${m}`).join("\n")
         : "(no specific feedback available - write general remedial material for this topic)") +
-      "\n\nGenerate the remedial notes and practice questions.",
+      "\n\nGenerate the remedial notes and practice questions." +
+      formatRetrievedContext(retrievedContext),
+    maxOutputTokens: 8000,
+  });
+}
+
+export async function generateWeeklyReportNarrative(
+  periodStart: string,
+  periodEnd: string,
+  classTopicStats: TopicStats[],
+  perStudentWeakTopics: { studentId: string; weakTopics: TopicStats[] }[],
+) {
+  return generateStructured({
+    schema: WeeklyReportContentSchema,
+    systemInstruction:
+      "You are writing a weekly performance summary email for a tuition center teacher, based " +
+      "on real aggregated grading data (not speculation). Be concrete and specific - name actual " +
+      "topics and actual student ids from the data given, never invent ones. Keep the class " +
+      "summary and headline actionable and brief; a busy teacher should be able to read this in " +
+      "under a minute and know exactly what to re-teach and who needs help.",
+    prompt:
+      `Reporting period: ${periodStart} to ${periodEnd}\n\n` +
+      `Class-wide topic performance (weakest first):\n${JSON.stringify(classTopicStats, null, 2)}\n\n` +
+      `Per-student weak topics:\n${JSON.stringify(perStudentWeakTopics, null, 2)}\n\n` +
+      "Write the weekly report.",
     maxOutputTokens: 8000,
   });
 }
