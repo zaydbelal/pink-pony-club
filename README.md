@@ -1,8 +1,17 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This is a [Next.js](https://nextjs.org) frontend bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app), backed by a Python (FastAPI) API in [`backend/`](./backend). The Next.js dev/prod server proxies `/api/*` requests to the backend via `next.config.ts` rewrites - see [`backend/README.md`](./backend/README.md) for backend setup.
 
 ## Getting Started
 
-First, run the development server:
+Start the backend first (see [`backend/README.md`](./backend/README.md)):
+
+```bash
+cd backend
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+```
+
+Then, in another terminal, run the frontend dev server:
 
 ```bash
 npm run dev

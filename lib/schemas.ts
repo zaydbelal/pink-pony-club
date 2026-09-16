@@ -1,290 +1,237 @@
-import { z } from "zod";
+/**
+ * Shared TypeScript types for the API's JSON shapes.
+ * Runtime validation now happens in the Python backend (backend/schemas.py);
+ * these are plain type definitions kept in sync with it for the frontend.
+ */
 
-export const SyllabusInputSchema = z.object({
-  subject: z.string(),
-  unitTitle: z.string(),
-  gradeLevel: z.string().optional(),
-  syllabusText: z.string(),
-});
-export type SyllabusInput = z.infer<typeof SyllabusInputSchema>;
+export interface SyllabusInput {
+  subject: string;
+  unitTitle: string;
+  gradeLevel?: string;
+  syllabusText: string;
+}
 
-export const LectureNotesSchema = z.object({
-  title: z.string(),
-  sections: z.array(
-    z.object({
-      heading: z.string(),
-      content: z.string(),
-    }),
-  ),
-});
-export type LectureNotes = z.infer<typeof LectureNotesSchema>;
+export interface LectureNotes {
+  title: string;
+  sections: { heading: string; content: string }[];
+}
 
-export const QuestionSchema = z.object({
-  id: z.string(),
-  type: z.enum(["short_answer", "long_answer", "mcq"]),
-  topic: z.string(),
-  prompt: z.string(),
-  options: z.array(z.string()).optional(),
-  answerKey: z.string(),
-  rubric: z.string(),
-  points: z.number(),
-});
-export type Question = z.infer<typeof QuestionSchema>;
+export type QuestionType = "short_answer" | "long_answer" | "mcq";
 
-export const QuestionPaperSchema = z.object({
-  title: z.string(),
-  instructions: z.string(),
-  questions: z.array(QuestionSchema),
-});
-export type QuestionPaper = z.infer<typeof QuestionPaperSchema>;
+export interface Question {
+  id: string;
+  type: QuestionType;
+  topic: string;
+  prompt: string;
+  options?: string[];
+  answerKey: string;
+  rubric: string;
+  points: number;
+}
 
-export const StudentAnswerSchema = z.object({
-  questionId: z.string(),
-  answer: z.string(),
-});
-export type StudentAnswer = z.infer<typeof StudentAnswerSchema>;
+export interface QuestionPaper {
+  title: string;
+  instructions: string;
+  questions: Question[];
+}
 
-export const QuestionGradeSchema = z.object({
-  questionId: z.string(),
-  score: z.number(),
-  maxScore: z.number(),
-  feedback: z.string(),
-});
-export type QuestionGrade = z.infer<typeof QuestionGradeSchema>;
+export interface StudentAnswer {
+  questionId: string;
+  answer: string;
+}
 
-export const PaperGradeSchema = z.object({
-  totalScore: z.number(),
-  maxScore: z.number(),
-  questionGrades: z.array(QuestionGradeSchema),
-});
-export type PaperGrade = z.infer<typeof PaperGradeSchema>;
+export interface QuestionGrade {
+  questionId: string;
+  score: number;
+  maxScore: number;
+  feedback: string;
+}
 
-export const HintRequestSchema = z.object({
-  problem: z.string(),
-  studentAttempt: z.string().optional(),
-  hintsGivenSoFar: z.array(z.string()).default([]),
-});
-export type HintRequest = z.infer<typeof HintRequestSchema>;
+export interface PaperGrade {
+  totalScore: number;
+  maxScore: number;
+  questionGrades: QuestionGrade[];
+}
 
-export const HintResponseSchema = z.object({
-  hint: z.string(),
-  isFinalHint: z.boolean(),
-});
-export type HintResponse = z.infer<typeof HintResponseSchema>;
+export interface HintRequest {
+  problem: string;
+  studentAttempt?: string;
+  hintsGivenSoFar: string[];
+}
+
+export interface HintResponse {
+  hint: string;
+  isFinalHint: boolean;
+}
 
 export type StudentQuestion = Omit<Question, "answerKey" | "rubric">;
 export type StudentQuestionPaper = Omit<QuestionPaper, "questions"> & {
   questions: StudentQuestion[];
 };
 
-/** Strips the answer key and grading rubric so a paper is safe to send to students. */
-export function toStudentPaper(paper: QuestionPaper): StudentQuestionPaper {
-  return {
-    ...paper,
-    questions: paper.questions.map((question) => ({
-      id: question.id,
-      type: question.type,
-      topic: question.topic,
-      prompt: question.prompt,
-      options: question.options,
-      points: question.points,
-    })),
-  };
+export type UnitStatus = "draft" | "published";
+
+export interface Unit {
+  id: string;
+  teacherId: string;
+  status: UnitStatus;
+  syllabus: SyllabusInput;
+  notes: LectureNotes;
+  paper: QuestionPaper;
+  createdAt: string;
 }
 
-export const UnitStatusSchema = z.enum(["draft", "published"]);
-export type UnitStatus = z.infer<typeof UnitStatusSchema>;
+export interface CreateUnitRequest {
+  teacherId: string;
+  syllabus: SyllabusInput;
+  numQuestions?: number;
+}
 
-export const UnitSchema = z.object({
-  id: z.string(),
-  teacherId: z.string(),
-  status: UnitStatusSchema,
-  syllabus: SyllabusInputSchema,
-  notes: LectureNotesSchema,
-  paper: QuestionPaperSchema,
-  createdAt: z.string(),
-});
-export type Unit = z.infer<typeof UnitSchema>;
+export interface PatchUnitRequest {
+  notes?: LectureNotes;
+  paper?: QuestionPaper;
+}
 
-export const CreateUnitRequestSchema = z.object({
-  teacherId: z.string().min(1).default("demo-teacher"),
-  syllabus: SyllabusInputSchema,
-  numQuestions: z.number().int().min(1).max(30).optional(),
-});
-export type CreateUnitRequest = z.infer<typeof CreateUnitRequestSchema>;
+export interface CreateSubmissionRequest {
+  unitId: string;
+  studentId: string;
+  answers: StudentAnswer[];
+}
 
-export const PatchUnitRequestSchema = z.object({
-  notes: LectureNotesSchema.optional(),
-  paper: QuestionPaperSchema.optional(),
-});
-export type PatchUnitRequest = z.infer<typeof PatchUnitRequestSchema>;
+export interface Submission {
+  id: string;
+  unitId: string;
+  studentId: string;
+  answers: StudentAnswer[];
+  grade: PaperGrade;
+  createdAt: string;
+}
 
-export const CreateSubmissionRequestSchema = z.object({
-  unitId: z.string(),
-  studentId: z.string(),
-  answers: z.array(StudentAnswerSchema),
-});
-export type CreateSubmissionRequest = z.infer<typeof CreateSubmissionRequestSchema>;
+export interface TopicStats {
+  topic: string;
+  correctCount: number;
+  partialCount: number;
+  incorrectCount: number;
+  scoredPoints: number;
+  maxPoints: number;
+  avgScorePct: number;
+  isWeak: boolean;
+  sampleMistakes: string[];
+}
 
-export const Submission = z.object({
-  id: z.string(),
-  unitId: z.string(),
-  studentId: z.string(),
-  answers: z.array(StudentAnswerSchema),
-  grade: PaperGradeSchema,
-  createdAt: z.string(),
-});
-export type Submission = z.infer<typeof Submission>;
+export interface FollowUpRequest {
+  topic: string;
+}
 
-export const TopicStatsSchema = z.object({
-  topic: z.string(),
-  correctCount: z.number(),
-  partialCount: z.number(),
-  incorrectCount: z.number(),
-  scoredPoints: z.number(),
-  maxPoints: z.number(),
-  avgScorePct: z.number(),
-  isWeak: z.boolean(),
-  sampleMistakes: z.array(z.string()),
-});
-export type TopicStats = z.infer<typeof TopicStatsSchema>;
+export interface FollowUpMaterial {
+  topic: string;
+  remedialNotes: string;
+  practiceQuestions: Question[];
+}
 
-export const FollowUpRequestSchema = z.object({
-  topic: z.string(),
-});
-export type FollowUpRequest = z.infer<typeof FollowUpRequestSchema>;
+export interface AddDocumentRequest {
+  title: string;
+  sourceText: string;
+}
 
-export const FollowUpMaterialSchema = z.object({
-  topic: z.string(),
-  remedialNotes: z.string(),
-  practiceQuestions: z.array(QuestionSchema).min(1),
-});
-export type FollowUpMaterial = z.infer<typeof FollowUpMaterialSchema>;
+export interface RetrievedChunk {
+  documentTitle: string;
+  text: string;
+  similarity: number;
+}
 
-export const AddDocumentRequestSchema = z.object({
-  title: z.string().min(1),
-  sourceText: z.string().min(1),
-});
-export type AddDocumentRequest = z.infer<typeof AddDocumentRequestSchema>;
+export interface WeeklyReportContent {
+  subject: string;
+  headline: string;
+  classSummary: string;
+  studentsNeedingAttention: { studentId: string; reason: string }[];
+  recommendedActions: string[];
+}
 
-export const RetrievedChunkSchema = z.object({
-  documentTitle: z.string(),
-  text: z.string(),
-  similarity: z.number(),
-});
-export type RetrievedChunk = z.infer<typeof RetrievedChunkSchema>;
+export interface Report {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  recipientEmail: string;
+  content: WeeklyReportContent;
+  emailSent: boolean;
+  createdAt: string;
+}
 
-export const WeeklyReportContentSchema = z.object({
-  subject: z.string(),
-  headline: z.string(),
-  classSummary: z.string(),
-  studentsNeedingAttention: z.array(
-    z.object({
-      studentId: z.string(),
-      reason: z.string(),
-    }),
-  ),
-  recommendedActions: z.array(z.string()),
-});
-export type WeeklyReportContent = z.infer<typeof WeeklyReportContentSchema>;
-
-export const ReportSchema = z.object({
-  id: z.string(),
-  periodStart: z.string(),
-  periodEnd: z.string(),
-  recipientEmail: z.string(),
-  content: WeeklyReportContentSchema,
-  emailSent: z.boolean(),
-  createdAt: z.string(),
-});
-export type Report = z.infer<typeof ReportSchema>;
-
-export const GenerateReportRequestSchema = z.object({
-  teacherId: z.string().min(1).default("demo-teacher"),
-  recipientEmail: z.string().default("teacher@example.com"),
-  sinceDays: z.number().int().min(1).max(90).optional(),
-});
-export type GenerateReportRequest = z.infer<typeof GenerateReportRequestSchema>;
+export interface GenerateReportRequest {
+  teacherId: string;
+  recipientEmail: string;
+  sinceDays?: number;
+}
 
 // --- Feynman Mode: student explains a topic back, AI scores clarity and finds gaps ---
 
-export const MisconceptionSchema = z.object({
-  statement: z.string(),
-  deficiency: z.string(),
-});
-export type Misconception = z.infer<typeof MisconceptionSchema>;
+export interface Misconception {
+  statement: string;
+  deficiency: string;
+}
 
-export const FeynmanEvaluationSchema = z.object({
-  clarityPct: z.number().min(0).max(100),
-  understoodConstructs: z.array(z.string()),
-  needsClarity: z.array(z.string()),
-  misconception: MisconceptionSchema.nullable(),
-  nextGuidedPrompt: z.string(),
-});
-export type FeynmanEvaluation = z.infer<typeof FeynmanEvaluationSchema>;
+export interface FeynmanEvaluation {
+  clarityPct: number;
+  understoodConstructs: string[];
+  needsClarity: string[];
+  misconception: Misconception | null;
+  nextGuidedPrompt: string;
+}
 
-export const FeynmanEvaluateRequestSchema = z.object({
-  studentId: z.string().min(1),
-  topic: z.string().min(1),
-  explanationText: z.string().min(1),
-});
-export type FeynmanEvaluateRequest = z.infer<typeof FeynmanEvaluateRequestSchema>;
+export interface FeynmanEvaluateRequest {
+  studentId: string;
+  topic: string;
+  explanationText: string;
+}
 
-export const FeynmanSessionSchema = z.object({
-  id: z.string(),
-  unitId: z.string(),
-  studentId: z.string(),
-  topic: z.string(),
-  attemptNumber: z.number().int().min(1),
-  explanationText: z.string(),
-  evaluation: FeynmanEvaluationSchema,
-  createdAt: z.string(),
-});
-export type FeynmanSession = z.infer<typeof FeynmanSessionSchema>;
+export interface FeynmanSession {
+  id: string;
+  unitId: string;
+  studentId: string;
+  topic: string;
+  attemptNumber: number;
+  explanationText: string;
+  evaluation: FeynmanEvaluation;
+  createdAt: string;
+}
 
 // --- Teacher remediation: generate and dispatch a step-by-step plan to a weak cohort ---
 
-export const RemediationStepKindSchema = z.enum([
-  "concept_recap",
-  "guided_questions",
-  "application_question",
-  "mastery_check",
-]);
-export type RemediationStepKind = z.infer<typeof RemediationStepKindSchema>;
+export type RemediationStepKind =
+  | "concept_recap"
+  | "guided_questions"
+  | "application_question"
+  | "mastery_check";
 
-export const RemediationStepSchema = z.object({
-  order: z.number().int().min(1),
-  kind: RemediationStepKindSchema,
-  title: z.string(),
-  description: z.string(),
-  estMinutes: z.number().int().min(1),
-});
-export type RemediationStep = z.infer<typeof RemediationStepSchema>;
+export interface RemediationStep {
+  order: number;
+  kind: RemediationStepKind;
+  title: string;
+  description: string;
+  estMinutes: number;
+}
 
-export const RemediationPlanSchema = z.object({
-  topic: z.string(),
-  steps: z.array(RemediationStepSchema).min(1),
-});
-export type RemediationPlan = z.infer<typeof RemediationPlanSchema>;
+export interface RemediationPlan {
+  topic: string;
+  steps: RemediationStep[];
+}
 
-export const CohortMemberSchema = z.object({
-  studentId: z.string(),
-  avgScorePct: z.number(),
-});
-export type CohortMember = z.infer<typeof CohortMemberSchema>;
+export interface CohortMember {
+  studentId: string;
+  avgScorePct: number;
+}
 
-export const GenerateRemediationRequestSchema = z.object({
-  topic: z.string().min(1),
-  studentIds: z.array(z.string().min(1)).min(1),
-});
-export type GenerateRemediationRequest = z.infer<typeof GenerateRemediationRequestSchema>;
+export interface GenerateRemediationRequest {
+  topic: string;
+  studentIds: string[];
+}
 
-export const AssignmentSchema = z.object({
-  id: z.string(),
-  unitId: z.string(),
-  topic: z.string(),
-  plan: RemediationPlanSchema,
-  studentIds: z.array(z.string()),
-  createdAt: z.string(),
-});
-export type Assignment = z.infer<typeof AssignmentSchema>;
+export interface Assignment {
+  id: string;
+  unitId: string;
+  topic: string;
+  plan: RemediationPlan;
+  studentIds: string[];
+  createdAt: string;
+}
