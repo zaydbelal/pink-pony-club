@@ -12,6 +12,7 @@ import type {
   CohortMember,
   Assignment,
 } from "@/lib/schemas";
+import { WeakTopicsBarChart } from "@/lib/charts";
 
 const TEACHER_ID_KEY = "classpilot.teacherId";
 
@@ -426,6 +427,7 @@ export default function TeacherPage() {
               <h3>Class weak topics</h3>
               <div className="card">
                 {unitWeakTopics.length === 0 && <p className="muted">No submissions yet.</p>}
+                {unitWeakTopics.length > 0 && <WeakTopicsBarChart topics={unitWeakTopics} />}
                 {unitWeakTopics.length > 0 && (
                   <table>
                     <thead>

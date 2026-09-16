@@ -12,6 +12,7 @@ import type {
   FeynmanEvaluation,
   FeynmanSession,
 } from "@/lib/schemas";
+import { FeynmanTrajectoryChart, WeakTopicsBarChart } from "@/lib/charts";
 
 interface StudentUnit {
   id: string;
@@ -88,6 +89,19 @@ export default function StudentPage() {
     setFeynmanExplanation("");
     setFeynmanEvaluation(null);
     setFeynmanHistory([]);
+  }
+
+  async function loadFeynmanHistory(topic: string) {
+    if (!selectedUnit || !topic) return;
+    try {
+      const res = await apiFetch<{ sessions: FeynmanSession[] }>(
+        `/api/units/${selectedUnit.id}/feynman?studentId=${encodeURIComponent(studentId)}&topic=${encodeURIComponent(topic)}`,
+      );
+      setFeynmanHistory(res.sessions);
+      setFeynmanEvaluation(res.sessions.length > 0 ? res.sessions[res.sessions.length - 1].evaluation : null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load prior attempts");
+    }
   }
 
   async function submitFeynman() {
@@ -297,6 +311,7 @@ export default function StudentPage() {
                     setFeynmanTopic(e.target.value);
                     setFeynmanEvaluation(null);
                     setFeynmanHistory([]);
+                    if (e.target.value) void loadFeynmanHistory(e.target.value);
                   }}
                 >
                   <option value="">Select a topic...</option>
@@ -367,7 +382,8 @@ export default function StudentPage() {
 
                 {feynmanHistory.length > 0 && (
                   <div className="card">
-                    <strong>Attempt history</strong>
+                    <strong>Clarity trajectory</strong>
+                    <FeynmanTrajectoryChart history={feynmanHistory} />
                     <table>
                       <thead>
                         <tr>
@@ -393,6 +409,11 @@ export default function StudentPage() {
           <h2>Your weak topics</h2>
           {weakTopics.length === 0 && (
             <p className="muted">No graded submissions yet - take a unit to see this.</p>
+          )}
+          {weakTopics.length > 0 && (
+            <div className="card">
+              <WeakTopicsBarChart topics={weakTopics} />
+            </div>
           )}
           <div className="card">
             <table>
